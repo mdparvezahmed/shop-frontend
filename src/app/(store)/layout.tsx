@@ -11,6 +11,13 @@ import { organizationJsonLd, websiteJsonLd } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/utils";
 import { getLayout } from "@/services/storefront.server";
 
+/**
+ * Render store pages on request instead of at build time, so the frontend can be
+ * built and deployed without the API being reachable. API data is still cached
+ * (see REVALIDATE in config/site.ts), so pages stay fast and fully server-rendered for SEO.
+ */
+export const dynamic = "force-dynamic";
+
 /** Store-wide SEO defaults; every page overrides title/description/canonical. */
 export async function generateMetadata(): Promise<Metadata> {
   const { store, seo } = await getLayout();
