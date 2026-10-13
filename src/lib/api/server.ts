@@ -24,16 +24,30 @@ export class ServerApiError extends Error {
   }
 }
 
+const RETRY_DELAY_MS = 500;
+
 async function call<T>(path: string, opts: Options = {}): Promise<ApiSuccess<T>> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (opts.auth) headers.cookie = (await cookies()).toString();
 
-  const res = await fetch(`${BACKEND_URL}${API_PREFIX}${path}${opts.query ? toQueryString(opts.query) : ""}`, {
+  const url = `${BACKEND_URL}${API_PREFIX}${path}${opts.query ? toQueryString(opts.query) : ""}`;
+  const init: RequestInit = {
     headers,
     ...(opts.auth || opts.revalidate === undefined
       ? { cache: "no-store" as const }
       : { next: { revalidate: opts.revalidate, tags: opts.tags } }),
-  });
+  };
+
+  // Retry once on a network error or 5xx: the database briefly runs out of
+  // connections under load, and a second attempt usually gets one.
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+    if (res.status >= 500) throw new Error(`API ${res.status}`);
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    res = await fetch(url, init);
+  }
 
   const json = (await res.json().catch(() => null)) as ApiSuccess<T> | ApiFailure | null;
   if (!res.ok || !json || !json.success) {
